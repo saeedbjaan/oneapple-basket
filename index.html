@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OneApple Basket</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+    html, body {
+        width: 100%; height: 100%; overflow: hidden;
+        font-family: 'Poppins', Arial, sans-serif;
+        background: linear-gradient(180deg, #87CEEB 0%, #b8e6f0 40%, #c8f0c8 70%, #7CB342 100%);
+        touch-action: none;
+        position: fixed;
+    }
+    #gameContainer { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+    
+    #hud {
+        position: absolute; top: 10px; left: 10px; right: 10px;
+        display: flex; justify-content: space-between;
+        pointer-events: none; z-index: 100;
+    }
+    .hud-box {
+        background: rgba(46, 125, 50, 0.9); color: white;
+        padding: 8px 16px; border-radius: 10px;
+        font-weight: 700; font-size: 15px;
+        border: 2px solid rgba(255,255,255,0.2);
+    }
+    .hud-box .label {
+        font-size: 9px; opacity: 0.85; display: block;
+        text-transform: uppercase; letter-spacing: 1px;
+    }
+    
+    .apple, .golden-apple, .bonus-apple, .powerup-apple {
+        position: absolute;
+        background-size: contain; background-repeat: no-repeat; background-position: center;
+        z-index: 10;
+    }
+    .apple { width: 50px; height: 50px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3)); }
+    .golden-apple {
+        width: 55px; height: 55px; z-index: 15;
+        filter: drop-shadow(0 0 12px #FFD700) brightness(1.3) saturate(1.6) hue-rotate(-25deg);
+        animation: spin 1.2s linear infinite;
+    }
+    .bonus-apple {
+        width: 60px; height: 60px; z-index: 20;
+        filter: drop-shadow(0 0 15px #FF00FF) brightness(1.5) saturate(2);
+        animation: spin 0.8s linear infinite;
+    }
+    .powerup-apple { width: 55px; height: 55px; z-index: 18; animation: pulse 1s ease-in-out infinite; }
+    .powerup-speed { filter: drop-shadow(0 0 15px #00BFFF) hue-rotate(180deg) brightness(1.5); }
+    .powerup-slow { filter: drop-shadow(0 0 15px #87CEEB) brightness(1.6) saturate(0.5); }
+    .powerup-life { filter: drop-shadow(0 0 15px #FF1744) hue-rotate(-90deg) brightness(1.3) saturate(2); }
+    .powerup-double { filter: drop-shadow(0 0 15px #FF00FF) hue-rotate(90deg) brightness(1.5) saturate(2); }
+    
+    @keyframes spin { 0%,100%{transform:rotate(-8deg);} 50%{transform:rotate(8deg);} }
+    @keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.15);} }
+    
+    #basket {
+        position: absolute; bottom: 60px; width: 100px; height: 65px;
+        z-index: 20; transition: transform 0.05s linear;
+    }
+    #basket .basket-body {
+        position: absolute; bottom: 0; width: 100%; height: 50px;
+        background: linear-gradient(180deg, #8B4513 0%, #6B3410 100%);
+        border-radius: 0 0 15px 15px; border: 3px solid #4A2500;
+    }
+    #basket .basket-rim {
+        position: absolute; top: 0; left: -4px; right: -4px; height: 18px;
+        background: linear-gradient(180deg, #A0522D 0%, #8B4513 100%);
+        border-radius: 9px; border: 3px solid #4A2500; z-index: 2;
+    }
+    
+    #startScreen, #gameOverScreen, #bonusScreen {
+        position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(10, 31, 15, 0.92);
+        display: flex; flex-direction: column; justify-content: center; align-items: center;
+        z-index: 1000; color: white; text-align: center; padding: 20px;
+    }
+    
+    #startScreen .logo-wrapper {
+        width: 130px; height: 130px; background: white; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 15px;
+        box-shadow: 0 10px 40px rgba(255, 255, 255, 0.4), 0 0 0 8px rgba(129, 199, 132, 0.3);
+        overflow: hidden;
+    }
+    #startScreen .logo-wrapper img { width: 85%; height: 85%; object-fit: contain; }
+    
+    #startScreen h1, #gameOverScreen h1 {
+        font-size: 30px; font-weight: 900; color: #81C784;
+        margin-bottom: 8px; text-shadow: 3px 3px 0 #2E7D32;
+    }
+    #bonusScreen h1 {
+        font-size: 34px; font-weight: 900; color: #FFD700;
+        text-shadow: 3px 3px 0 #B8860B; margin-bottom: 15px;
+    }
+    
+    #startScreen .subtitle { font-size: 14px; color: #ccc; margin-bottom: 15px; }
+    
+    .interval-picker {
+        display: flex; gap: 6px; margin-bottom: 15px;
+        background: rgba(0,0,0,0.3); padding: 8px 10px; border-radius: 10px;
+        border: 2px solid rgba(129, 199, 132, 0.3); flex-wrap: wrap; justify-content: center;
+    }
+    .interval-picker label {
+        font-size: 10px; color: #ccc; margin-right: 6px; align-self: center;
+        text-transform: uppercase;
+    }
+    .interval-btn {
+        padding: 6px 12px; background: rgba(255,255,255,0.1);
+        border: 2px solid rgba(129, 199, 132, 0.4); color: #ccc;
+        border-radius: 6px; font-family: 'Poppins', sans-serif;
+        font-weight: 700; font-size: 12px; cursor: pointer;
+    }
+    .interval-btn.selected {
+        background: linear-gradient(135deg, #4CAF50, #2E7D32);
+        border-color: #81C784; color: white;
+    }
+    
+    .btn {
+        display: inline-block; padding: 14px 40px;
+        background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+        color: white; border: none; border-radius: 10px;
+        font-family: 'Poppins', sans-serif; font-size: 17px; font-weight: 700;
+        cursor: pointer; box-shadow: 0 6px 20px rgba(76, 175, 80, 0.5);
+        text-transform: uppercase; letter-spacing: 1px;
+    }
+    .btn-golden {
+        background: linear-gradient(135deg, #FFD700 0%, #B8860B 100%);
+        color: #333;
+    }
+    
+    .bonus-info {
+        background: rgba(255,255,255,0.1); border: 2px solid rgba(255,215,0,0.5);
+        border-radius: 12px; padding: 15px 20px; margin: 15px 0;
+        max-width: 320px; font-size: 12px; line-height: 1.7;
+    }
+    .bonus-info strong { color: #FFD700; }
+    
+    .final-score {
+        font-size: 55px; font-weight: 900; color: #FFEB3B;
+        text-shadow: 4px 4px 0 #2E7D32; margin: 8px 0;
+    }
+    .final-label {
+        font-size: 12px; color: #aaa; text-transform: uppercase;
+        letter-spacing: 3px; margin-top: 10px;
+    }
+    
+    .score-popup {
+        position: absolute; color: #FFEB3B; font-weight: 900; font-size: 24px;
+        pointer-events: none; animation: popupFade 0.8s ease-out forwards;
+        z-index: 500; text-shadow: 2px 2px 0 #2E7D32;
+    }
+    .score-popup.golden { color: #FFD700; font-size: 34px; text-shadow: 3px 3px 0 #B8860B; }
+    .score-popup.bonus { color: #FF00FF; font-size: 38px; text-shadow: 3px 3px 0 #00FFFF; }
+    .score-popup.powerup { color: #00FFFF; font-size: 28px; text-shadow: 2px 2px 0 #0080FF; }
+    @keyframes popupFade { 0%{opacity:1;transform:translateY(0) scale(1);} 100%{opacity:0;transform:translateY(-60px) scale(1.6);} }
+    
+    .miss-effect {
+        position: absolute; font-size: 30px;
+        animation: missAnim 0.6s ease-out forwards; z-index: 500;
+    }
+    @keyframes missAnim { 0%{opacity:1;transform:scale(1);} 100%{opacity:0;transform:scale(2);} }
+    
+    #bonusTimer {
+        position: absolute; top: 0; left: 0; height: 5px;
+        background: linear-gradient(90deg, #FFD700, #FF00FF);
+        z-index: 700; width: 100%; box-shadow: 0 0 15px #FFD700; display: none;
+    }
+    
+    #powerupIndicator {
+        position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.85);
+        border: 2px solid #FFD700; border-radius: 10px;
+        padding: 6px 16px; color: white; font-weight: 700; font-size: 12px;
+        display: none; z-index: 200; text-align: center;
+    }
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+    <div id="bonusTimer"></div>
+    <div id="powerupIndicator"></div>
+    
+    <div id="hud" style="display: none;">
+        <div class="hud-box"><span class="label">Score</span><span id="score">0</span></div>
+        <div class="hud-box" id="lives">
+            <span class="label">Lives</span>
+            <span class="heart">🍎</span><span class="heart">🍎</span><span class="heart">🍎</span>
+        </div>
+    </div>
+    
+    <div id="basket" style="display: none;">
+        <div class="basket-body"></div>
+        <div class="basket-rim"></div>
+    </div>
+    
+    <div id="startScreen">
+        <div class="logo-wrapper">
+            <img src="https://i.postimg.cc/q7gkfVbK/One-Apple-Logo.png" alt="OneApple">
+        </div>
+        <h1>OneApple Basket</h1>
+        <p class="subtitle">Catch the falling apples!</p>
+        
+        <div class="interval-picker">
+            <label>Bonus:</label>
+            <button class="interval-btn" data-score="50">50</button>
+            <button class="interval-btn selected" data-score="75">75</button>
+            <button class="interval-btn" data-score="100">100</button>
+            <button class="interval-btn" data-score="200">200</button>
+        </div>
+        
+        <button class="btn" onclick="startGame()">▶ Play Now</button>
+    </div>
+    
+    <div id="bonusScreen" style="display: none; background: linear-gradient(135deg, #4A148C 0%, #1A237E 50%, #311B92 100%);">
+        <h1>🌈 BONUS! 🌈</h1>
+        <p style="color: #FFD700; font-size: 14px; font-weight: 700; margin-bottom: 15px;">
+            15 seconds of extra points!
+        </p>
+        <div class="bonus-info">
+            🌈 <strong>Rainbow apples</strong> = <strong>+10 points!</strong><br>
+            ⭐ Golden apples = <strong>+15 points!</strong><br>
+            🚀 Everything moves <strong>faster!</strong><br>
+            💚 No lives lost during bonus
+        </div>
+        <button class="btn btn-golden" onclick="startBonusStage()" style="margin-top: 10px;">▶ Start</button>
+    </div>
+    
+    <div id="gameOverScreen" style="display: none;">
+        <h1>Game Over!</h1>
+        <p class="final-label">Score</p>
+        <div class="final-score" id="finalScore">0</div>
+        <p style="color: #ccc; font-size: 13px; margin: 10px 0;">High Score: <span id="highScoreText">0</span></p>
+        <button class="btn" onclick="restartGame()" style="margin-top: 15px;">↻ Play Again</button>
+    </div>
+</div>
+
+<script>
+    const LOGO_URL = 'https://i.postimg.cc/q7gkfVbK/One-Apple-Logo.png';
+    const APPLE_SIZE = 55;
+    const BASKET_WIDTH = 100;
+    const BASKET_HEIGHT = 65;
+    const GOLDEN_CHANCE = 0.12;
+    const POWERUP_CHANCE = 0.05;
+    const GOLDEN_POINTS = 5;
+    const BONUS_GOLDEN_POINTS = 15;
+    const BONUS_RAINBOW_POINTS = 10;
+    const BONUS_DURATION_MS = 15000;
+    
+    let gameState = {
+        mode: 'menu', score: 0, lives: 3, apples: [], basketX: 0,
+        lastSpawn: 0, spawnInterval: 1200, speedMultiplier: 1,
+        streak: 0, bonusEndTime: 0, lastBonusThreshold: 0,
+        activePowerup: null, powerupEndTime: 0,
+        bonusTriggerScore: parseInt(localStorage.getItem('oneapple_bonus_interval') || '75')
+    };
+    
+    let mouseX = null;
+    let animationId = null;
+    let touchActive = false;
+    
+    const container = document.getElementById('gameContainer');
+    const basket = document.getElementById('basket');
+    const scoreEl = document.getElementById('score');
+    const hud = document.getElementById('hud');
+    const heartEls = document.querySelectorAll('#lives .heart');
+    const bonusTimerBar = document.getElementById('bonusTimer');
+    const powerupIndicator = document.getElementById('powerupIndicator');
+    
+    let highScore = parseInt(localStorage.getItem('oneapple_highscore') || '0');
+    document.getElementById('highScoreText').textContent = highScore;
+    
+    // Touch + mouse input
+    function handleMove(clientX) {
+        if (gameState.mode !== 'playing' && gameState.mode !== 'bonus') return;
+        const rect = container.getBoundingClientRect();
+        mouseX = clientX - rect.left;
+    }
+    
+    container.addEventListener('touchstart', (e) => {
+        touchActive = true;
+        if (e.touches[0]) handleMove(e.touches[0].clientX);
+        e.preventDefault();
+    }, { passive: false });
+    
+    container.addEventListener('touchmove', (e) => {
+        if (e.touches[0]) handleMove(e.touches[0].clientX);
+        e.preventDefault();
+    }, { passive: false });
+    
+    container.addEventListener('touchend', () => { touchActive = false; });
+    
+    container.addEventListener('mousemove', (e) => {
+        if (!touchActive) handleMove(e.clientX);
+    });
+    
+    function isActivelyPlaying() {
+        return gameState.mode === 'playing' || gameState.mode === 'bonus';
+    }
+    
+    function moveBasket() {
+        if (!isActivelyPlaying()) return;
+        const maxX = container.clientWidth - BASKET_WIDTH;
+        if (mouseX !== null) {
+            gameState.basketX = Math.max(0, Math.min(maxX, mouseX - BASKET_WIDTH / 2));
+        }
+        basket.style.transform = `translateX(${gameState.basketX}px)`;
+    }
+    
+    function spawnApple() {
+        const roll = Math.random();
+        let type = 'regular';
+        
+        if (gameState.mode === 'bonus') {
+            if (roll < 0.30) type = 'golden';
+            else if (roll < 0.70) type = 'bonus';
+        } else {
+            if (roll < GOLDEN_CHANCE) type = 'golden';
+            else if (roll < GOLDEN_CHANCE + POWERUP_CHANCE) {
+                const pu = Math.random();
+                if (pu < 0.25) type = 'powerup-speed';
+                else if (pu < 0.5) type = 'powerup-slow';
+                else if (pu < 0.75) type = 'powerup-life';
+                else type = 'powerup-double';
+            }
+        }
+        
+        const apple = document.createElement('div');
+        if (type === 'golden') apple.className = 'golden-apple';
+        else if (type === 'bonus') apple.className = 'bonus-apple';
+        else if (type.startsWith('powerup')) apple.className = 'powerup-apple ' + type;
+        else apple.className = 'apple';
+        
+        apple.style.backgroundImage = `url(${LOGO_URL})`;
+        
+        const x = Math.random() * (container.clientWidth - APPLE_SIZE);
+        const y = -APPLE_SIZE;
+        apple.style.left = x + 'px';
+        apple.style.top = y + 'px';
+        container.appendChild(apple);
+        
+        let speed;
+        if (type === 'bonus') speed = 4 + Math.random() * 2;
+        else if (type === 'golden' || type.startsWith('powerup')) speed = 3.5 + Math.random() * 2;
+        else speed = 2.5 + Math.random() * 2;
+        
+        gameState.apples.push({ el: apple, x: x, y: y, speed: speed, type: type });
+    }
+    
+    function updateApples() {
+        if (!isActivelyPlaying()) return;
+        const basketTop = container.clientHeight - BASKET_HEIGHT - 60;
+        const slowMult = (gameState.activePowerup === 'slow') ? 0.5 : 1;
+        
+        for (let i = gameState.apples.length - 1; i >= 0; i--) {
+            const apple = gameState.apples[i];
+            apple.y += apple.speed * gameState.speedMultiplier * slowMult;
+            apple.el.style.top = apple.y + 'px';
+            
+            const appleCenterX = apple.x + APPLE_SIZE / 2;
+            const basketLeft = gameState.basketX;
+            const basketRight = gameState.basketX + BASKET_WIDTH;
+            
+            if (apple.y + APPLE_SIZE >= basketTop && 
+                apple.y + APPLE_SIZE <= basketTop + BASKET_HEIGHT &&
+                appleCenterX >= basketLeft && appleCenterX <= basketRight) {
+                
+                let points = 1;
+                let popupClass = '';
+                
+                if (apple.type === 'golden') {
+                    points = gameState.mode === 'bonus' ? BONUS_GOLDEN_POINTS : GOLDEN_POINTS;
+                    popupClass = 'golden';
+                } else if (apple.type === 'bonus') {
+                    points = BONUS_RAINBOW_POINTS;
+                    popupClass = 'bonus';
+                } else if (apple.type.startsWith('powerup')) {
+                    points = 2;
+                    popupClass = 'powerup';
+                    activatePowerup(apple.type);
+                }
+                
+                if (gameState.activePowerup === 'double') points *= 2;
+                
+                gameState.score += points;
+                gameState.streak++;
+                updateScoreDisplay();
+                showScorePopup(appleCenterX, apple.y, '+' + points, popupClass);
+                
+                apple.el.remove();
+                gameState.apples.splice(i, 1);
+                continue;
+            }
+            
+            if (apple.y > container.clientHeight) {
+                if (apple.type === 'regular' && gameState.mode === 'playing') missApple();
+                apple.el.remove();
+                gameState.apples.splice(i, 1);
+            }
+        }
+    }
+    
+    function activatePowerup(type) {
+        if (type === 'powerup-life') {
+            if (gameState.lives < 5) { gameState.lives++; updateLivesDisplay(); }
+            showPowerupIndicator('❤️ Extra Life!', 2000);
+            return;
+        }
+        
+        if (type === 'powerup-speed') {
+            gameState.activePowerup = 'speed';
+            gameState.powerupEndTime = Date.now() + 5000;
+            showPowerupIndicator('⚡ Speed!', 5000);
+        } else if (type === 'powerup-slow') {
+            gameState.activePowerup = 'slow';
+            gameState.powerupEndTime = Date.now() + 5000;
+            showPowerupIndicator('🧊 Slow-Mo!', 5000);
+        } else if (type === 'powerup-double') {
+            gameState.activePowerup = 'double';
+            gameState.powerupEndTime = Date.now() + 8000;
+            showPowerupIndicator('💎 2x Points!', 8000);
+        }
+    }
+    
+    function showPowerupIndicator(text, duration) {
+        powerupIndicator.textContent = text;
+        powerupIndicator.style.display = 'block';
+        setTimeout(() => { powerupIndicator.style.display = 'none'; }, duration);
+    }
+    
+    function missApple() {
+        gameState.lives--;
+        gameState.streak = 0;
+        updateLivesDisplay();
+        updateScoreDisplay();
+        
+        const miss = document.createElement('div');
+        miss.className = 'miss-effect';
+        miss.textContent = '💔';
+        miss.style.left = Math.random() * (container.clientWidth - 40) + 'px';
+        miss.style.top = (container.clientHeight - 200) + 'px';
+        container.appendChild(miss);
+        setTimeout(() => miss.remove(), 600);
+        
+        if (gameState.lives <= 0) triggerGameOver();
+    }
+    
+    function updateScoreDisplay() {
+        scoreEl.textContent = gameState.score;
+    }
+    
+    function updateLivesDisplay() {
+        heartEls.forEach((el, i) => {
+            if (i >= gameState.lives) el.classList.add('lost');
+            else el.classList.remove('lost');
+        });
+    }
+    
+    function checkBonusTrigger() {
+        if (gameState.mode !== 'playing') return;
+        if (gameState.score < gameState.bonusTriggerScore) return;
+        const currentThreshold = Math.floor(gameState.score / gameState.bonusTriggerScore);
+        if (currentThreshold > gameState.lastBonusThreshold) {
+            gameState.lastBonusThreshold = currentThreshold;
+            triggerBonusIntro();
+        }
+    }
+    
+    function triggerBonusIntro() {
+        gameState.mode = 'bonus-intro';
+        gameState.apples.forEach(a => a.el.remove());
+        gameState.apples = [];
+        document.getElementById('bonusScreen').style.display = 'flex';
+    }
+    
+    function startBonusStage() {
+        document.getElementById('bonusScreen').style.display = 'none';
+        gameState.mode = 'bonus';
+        gameState.bonusEndTime = Date.now() + BONUS_DURATION_MS;
+        gameState.spawnInterval = 700;
+        gameState.lastSpawn = performance.now();
+        bonusTimerBar.style.display = 'block';
+        bonusTimerBar.style.width = '100%';
+    }
+    
+    function endBonusStage() {
+        if (gameState.mode !== 'bonus') return;
+        gameState.mode = 'playing';
+        gameState.spawnInterval = Math.max(500, 1200 - Math.floor(gameState.score / 25) * 50);
+        bonusTimerBar.style.display = 'none';
+        mouseX = null;
+    }
+    
+    function showScorePopup(x, y, text, extraClass) {
+        const popup = document.createElement('div');
+        popup.className = 'score-popup' + (extraClass ? ' ' + extraClass : '');
+        popup.textContent = text;
+        popup.style.left = x + 'px';
+        popup.style.top = y + 'px';
+        container.appendChild(popup);
+        setTimeout(() => popup.remove(), 800);
+    }
+    
+    function gameLoop() {
+        animationId = requestAnimationFrame(gameLoop);
+        
+        if (gameState.mode === 'bonus') {
+            const remaining = gameState.bonusEndTime - Date.now();
+            if (remaining <= 0) endBonusStage();
+            else bonusTimerBar.style.width = (remaining / BONUS_DURATION_MS) * 100 + '%';
+        }
+        
+        if (gameState.activePowerup && Date.now() > gameState.powerupEndTime) {
+            gameState.activePowerup = null;
+        }
+        
+        if (!isActivelyPlaying()) return;
+        
+        moveBasket();
+        updateApples();
+        checkBonusTrigger();
+        
+        if (performance.now() - gameState.lastSpawn > gameState.spawnInterval) {
+            spawnApple();
+            gameState.lastSpawn = performance.now();
+        }
+    }
+    
+    function startGame() {
+        document.getElementById('startScreen').style.display = 'none';
+        document.getElementById('gameOverScreen').style.display = 'none';
+        document.getElementById('bonusScreen').style.display = 'none';
+        hud.style.display = 'flex';
+        basket.style.display = 'block';
+        bonusTimerBar.style.display = 'none';
+        
+        gameState.mode = 'playing';
+        gameState.score = 0;
+        gameState.lives = 3;
+        gameState.apples = [];
+        gameState.basketX = container.clientWidth / 2 - BASKET_WIDTH / 2;
+        gameState.lastSpawn = performance.now();
+        gameState.spawnInterval = 1200;
+        gameState.speedMultiplier = 1;
+        gameState.streak = 0;
+        gameState.bonusEndTime = 0;
+        gameState.lastBonusThreshold = 0;
+        gameState.activePowerup = null;
+        mouseX = null;
+        
+        updateScoreDisplay();
+        updateLivesDisplay();
+        basket.style.transform = `translateX(${gameState.basketX}px)`;
+        
+        if (!animationId) animationId = requestAnimationFrame(gameLoop);
+    }
+    
+    function triggerGameOver() {
+        gameState.mode = 'game-over';
+        gameState.apples.forEach(a => a.el.remove());
+        gameState.apples = [];
+        
+        const isNewRecord = gameState.score > highScore;
+        if (isNewRecord) {
+            highScore = gameState.score;
+            localStorage.setItem('oneapple_highscore', highScore);
+        }
+        
+        document.getElementById('finalScore').textContent = gameState.score;
+        document.getElementById('highScoreText').textContent = highScore;
+        document.getElementById('gameOverScreen').style.display = 'flex';
+    }
+    
+    function restartGame() { startGame(); }
+    
+    // Interval selection
+    document.querySelectorAll('.interval-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const score = parseInt(btn.dataset.score);
+            gameState.bonusTriggerScore = score;
+            localStorage.setItem('oneapple_bonus_interval', score);
+            document.querySelectorAll('.interval-btn').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        });
+    });
+    
+    // Load saved interval
+    document.querySelectorAll('.interval-btn').forEach(btn => {
+        if (parseInt(btn.dataset.score) === gameState.bonusTriggerScore) {
+            btn.classList.add('selected');
+        }
+    });
+    
+    // Service Worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./service-worker.js')
+            .then(() => console.log('SW registered'))
+            .catch((err) => console.log('SW failed:', err));
+    }
+    
+    animationId = requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
