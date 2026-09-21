@@ -6,13 +6,14 @@
 <title>OneApple Basket</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;900&display=swap" rel="stylesheet">
 <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; }
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; }
     html, body {
         width: 100%; height: 100%; overflow: hidden;
         font-family: 'Poppins', Arial, sans-serif;
         background: linear-gradient(180deg, #87CEEB 0%, #b8e6f0 40%, #c8f0c8 70%, #7CB342 100%);
         touch-action: none;
         position: fixed;
+        overscroll-behavior: none;
     }
     #gameContainer { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
     
@@ -59,7 +60,7 @@
     
     #basket {
         position: absolute; bottom: 60px; width: 100px; height: 65px;
-        z-index: 20; transition: transform 0.03s linear;
+        z-index: 20;
     }
     #basket .basket-body {
         position: absolute; bottom: 0; width: 100%; height: 50px;
@@ -178,7 +179,6 @@
         display: none; z-index: 200; text-align: center;
     }
     
-    /* Music toggle */
     #musicToggle {
         position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
         background: rgba(46, 125, 50, 0.9); color: white;
@@ -271,7 +271,7 @@
     };
     
     let animationId = null;
-    let targetX = null; // Where the basket should move to
+    let targetX = null;
     let musicEnabled = true;
     
     const container = document.getElementById('gameContainer');
@@ -286,9 +286,9 @@
     let highScore = parseInt(localStorage.getItem('oneapple_highscore') || '0');
     document.getElementById('highScoreText').textContent = highScore;
     
-    // ============ MUSIC — Web Audio API ============
+    // ============ AUDIO ============
     let audioContext = null;
-    let musicNodes = [];
+    let musicTimeout = null;
     let musicPlaying = false;
     
     function initAudio() {
@@ -300,71 +300,102 @@
         }
     }
     
-    // Play a simple tone
-    function playTone(freq, duration, type = 'sine', volume = 0.15) {
+    function playTone(freq, duration, type = 'square', volume = 0.15) {
         if (!audioContext || !musicEnabled) return;
-        const osc = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        osc.type = type;
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(volume, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(audioContext.destination);
-        osc.start();
-        osc.stop(audioContext.currentTime + duration);
+        try {
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(volume, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            osc.start();
+            osc.stop(audioContext.currentTime + duration);
+        } catch(e) {}
     }
     
-    // Sound effects
-    function sfxCatch() { playTone(800, 0.08, 'square', 0.08); }
-    function sfxGolden() { 
-        playTone(1200, 0.1, 'square', 0.1); 
-        setTimeout(() => playTone(1600, 0.15, 'square', 0.1), 80);
+    // ============ SOUND EFFECTS ============
+    function sfxCatch() { playTone(880, 0.06, 'square', 0.12); }
+    function sfxGolden() {
+        playTone(1200, 0.08, 'square', 0.15);
+        setTimeout(() => playTone(1600, 0.12, 'square', 0.15), 70);
+        setTimeout(() => playTone(2000, 0.15, 'square', 0.15), 140);
     }
-    function sfxMiss() { playTone(200, 0.25, 'sawtooth', 0.15); }
+    function sfxMiss() { 
+        playTone(300, 0.15, 'sawtooth', 0.2); 
+        setTimeout(() => playTone(200, 0.25, 'sawtooth', 0.2), 100);
+    }
     function sfxBonus() {
-        [523, 659, 784, 1047].forEach((f, i) => {
-            setTimeout(() => playTone(f, 0.15, 'square', 0.12), i * 100);
+        [523, 659, 784, 1047, 1319].forEach((f, i) => {
+            setTimeout(() => playTone(f, 0.12, 'square', 0.18), i * 80);
         });
     }
     function sfxGameOver() {
-        [400, 350, 300, 250, 200].forEach((f, i) => {
-            setTimeout(() => playTone(f, 0.2, 'sawtooth', 0.12), i * 150);
+        [400, 350, 300, 250, 200, 150].forEach((f, i) => {
+            setTimeout(() => playTone(f, 0.18, 'sawtooth', 0.2), i * 130);
         });
     }
     function sfxPowerup() {
-        [600, 800, 1000, 1200].forEach((f, i) => {
-            setTimeout(() => playTone(f, 0.08, 'square', 0.1), i * 40);
+        [600, 800, 1000, 1200, 1500].forEach((f, i) => {
+            setTimeout(() => playTone(f, 0.07, 'square', 0.15), i * 35);
         });
     }
     
-    // Chiptune background music — loop pattern
+    // ============ CHIPTUNE MUSIC — FASTER, LOUDER ============
+    // Melody: catchy 8-bit loop. Beat = 0.15s per step (faster!)
+    const BEAT_MS = 150;
     const MELODY = [
-        // [frequency, duration in beats]
-        [523, 0.5], [659, 0.5], [784, 0.5], [659, 0.5],
-        [523, 0.5], [659, 0.5], [784, 1.0],
-        [698, 0.5], [659, 0.5], [587, 0.5], [523, 0.5],
-        [587, 0.5], [659, 0.5], [698, 1.0],
-        [523, 0.5], [659, 0.5], [784, 0.5], [880, 0.5],
-        [784, 0.5], [659, 0.5], [523, 1.0],
-        [440, 0.5], [523, 0.5], [587, 0.5], [659, 0.5],
-        [587, 0.5], [523, 0.5], [440, 1.0]
+        // Main melody
+        523, 659, 784, 659, 523, 659, 784, 1047,
+        880, 784, 659, 784, 880, 1047, 880, 659,
+        523, 659, 784, 659, 523, 659, 784, 1047,
+        698, 659, 587, 523, 587, 659, 523, 0,
+        // Second phrase
+        659, 784, 880, 784, 659, 523, 659, 784,
+        880, 1047, 1175, 1047, 880, 784, 659, 523,
+        587, 698, 880, 698, 587, 523, 587, 698,
+        784, 698, 587, 523, 440, 523, 587, 0
+    ];
+    
+    // Bass line (one note per 2 melody notes)
+    const BASS = [
+        131, 131, 175, 175, 131, 131, 175, 175,
+        220, 220, 175, 175, 220, 220, 175, 175,
+        131, 131, 175, 175, 131, 131, 175, 175,
+        175, 175, 147, 147, 147, 147, 131, 0,
+        165, 165, 220, 220, 165, 165, 220, 220,
+        220, 220, 294, 294, 220, 220, 165, 165,
+        147, 147, 175, 175, 147, 147, 175, 175,
+        196, 196, 147, 147, 110, 110, 147, 0
     ];
     
     let musicIndex = 0;
-    let musicTimeout = null;
     
-    function playMusicLoop() {
-        if (!musicEnabled || !audioContext || gameState.mode === 'menu' || gameState.mode === 'game-over') return;
+    function playMusicStep() {
+        if (!musicEnabled || !audioContext || !musicPlaying) return;
         
-        const [freq, duration] = MELODY[musicIndex];
-        const beatDuration = 0.25; // seconds per beat
-        const dur = duration * beatDuration;
+        const melodyNote = MELODY[musicIndex];
+        const bassNote = BASS[musicIndex];
         
-        playTone(freq, dur * 0.9, 'triangle', 0.06);
+        // Main melody (louder, brighter)
+        if (melodyNote > 0) {
+            playTone(melodyNote, BEAT_MS / 1000 * 0.85, 'square', 0.11);
+        }
+        
+        // Bass (every other step, deeper)
+        if (bassNote > 0 && musicIndex % 2 === 0) {
+            playTone(bassNote, BEAT_MS / 1000 * 1.8, 'triangle', 0.14);
+        }
+        
+        // Hi-hat on every other beat (high pitch, short)
+        if (musicIndex % 2 === 1) {
+            playTone(8000, 0.02, 'square', 0.03);
+        }
+        
         musicIndex = (musicIndex + 1) % MELODY.length;
-        
-        musicTimeout = setTimeout(playMusicLoop, dur * 1000);
+        musicTimeout = setTimeout(playMusicStep, BEAT_MS);
     }
     
     function startMusic() {
@@ -372,7 +403,7 @@
         if (musicPlaying) return;
         musicPlaying = true;
         musicIndex = 0;
-        playMusicLoop();
+        playMusicStep();
     }
     
     function stopMusic() {
@@ -394,61 +425,71 @@
         localStorage.setItem('oneapple_music', musicEnabled ? 'on' : 'off');
     }
     
-    // Load music preference
     if (localStorage.getItem('oneapple_music') === 'off') {
         musicEnabled = false;
         musicToggle.textContent = '🔇';
     }
     
-    // ============ TOUCH CONTROLS ============
-    // Track target position; the loop smoothly moves basket toward it.
-    function updateTargetFromTouch(clientX) {
-        if (gameState.mode !== 'playing' && gameState.mode !== 'bonus') return;
-        const rect = container.getBoundingClientRect();
-        const x = clientX - rect.left;
-        // Offset so basket sits a bit above finger (finger doesn't block view)
-        targetX = x;
+    // ============ BULLETPROOF TOUCH CONTROLS ============
+    // Attach to document/window, not container — most reliable on all devices
+    function isGameActive() {
+        return gameState.mode === 'playing' || gameState.mode === 'bonus';
     }
     
-    container.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        initAudio();
-        if (e.touches.length > 0) updateTargetFromTouch(e.touches[0].clientX);
-    }, { passive: false });
-    
-    container.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        if (e.touches.length > 0) updateTargetFromTouch(e.touches[0].clientX);
-    }, { passive: false });
-    
-    container.addEventListener('touchend', (e) => {
-        e.preventDefault();
-        targetX = null;
-    }, { passive: false });
-    
-    // Also support mouse (for desktop testing)
-    container.addEventListener('mousemove', (e) => {
-        if (gameState.mode !== 'playing' && gameState.mode !== 'bonus') return;
+    function updateTarget(clientX) {
+        if (!isGameActive()) return;
         const rect = container.getBoundingClientRect();
-        targetX = e.clientX - rect.left;
+        targetX = clientX - rect.left;
+    }
+    
+    // Modern Pointer Events (covers mouse + touch + pen)
+    document.addEventListener('pointerdown', (e) => {
+        initAudio();
+        if (isGameActive()) {
+            updateTarget(e.clientX);
+            e.preventDefault();
+        }
+    }, { passive: false });
+    
+    document.addEventListener('pointermove', (e) => {
+        if (isGameActive() && (e.buttons > 0 || e.pointerType !== 'mouse')) {
+            updateTarget(e.clientX);
+        }
+    }, { passive: true });
+    
+    // Fallback touch events for older browsers
+    document.addEventListener('touchstart', (e) => {
+        initAudio();
+        if (isGameActive() && e.touches[0]) {
+            updateTarget(e.touches[0].clientX);
+        }
+    }, { passive: true });
+    
+    document.addEventListener('touchmove', (e) => {
+        if (isGameActive() && e.touches[0]) {
+            updateTarget(e.touches[0].clientX);
+        }
+    }, { passive: true });
+    
+    // Desktop mouse move (no click needed)
+    document.addEventListener('mousemove', (e) => {
+        if (isGameActive() && e.pointerType !== 'touch') {
+            updateTarget(e.clientX);
+        }
     });
     
     // ============ BASKET MOVEMENT ============
     function moveBasket() {
-        if (!isActivelyPlaying()) return;
+        if (!isGameActive()) return;
         const maxX = container.clientWidth - BASKET_WIDTH;
         
         if (targetX !== null) {
             const desired = Math.max(0, Math.min(maxX, targetX - BASKET_WIDTH / 2));
-            // Smooth follow: move 30% of distance each frame (feels responsive but not jittery)
-            gameState.basketX += (desired - gameState.basketX) * 0.35;
+            // Very fast follow (0.5) for responsive touch feel
+            gameState.basketX += (desired - gameState.basketX) * 0.5;
         }
         
         basket.style.transform = `translateX(${gameState.basketX}px)`;
-    }
-    
-    function isActivelyPlaying() {
-        return gameState.mode === 'playing' || gameState.mode === 'bonus';
     }
     
     // ============ SPAWN ============
@@ -493,7 +534,7 @@
     }
     
     function updateApples() {
-        if (!isActivelyPlaying()) return;
+        if (!isGameActive()) return;
         const basketTop = container.clientHeight - BASKET_HEIGHT - 60;
         const slowMult = (gameState.activePowerup === 'slow') ? 0.5 : 1;
         
@@ -665,7 +706,7 @@
             gameState.activePowerup = null;
         }
         
-        if (!isActivelyPlaying()) return;
+        if (!isGameActive()) return;
         
         moveBasket();
         updateApples();
@@ -730,7 +771,6 @@
     
     function restartGame() { startGame(); }
     
-    // Interval selection
     document.querySelectorAll('.interval-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             initAudio();
@@ -742,21 +782,18 @@
         });
     });
     
-    // Load saved interval
     document.querySelectorAll('.interval-btn').forEach(btn => {
         if (parseInt(btn.dataset.score) === gameState.bonusTriggerScore) {
             btn.classList.add('selected');
         }
     });
     
-    // Service Worker
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js')
             .then(() => console.log('SW registered'))
             .catch((err) => console.log('SW failed:', err));
     }
     
-    // Prevent pinch zoom
     document.addEventListener('gesturestart', e => e.preventDefault());
     document.addEventListener('gesturechange', e => e.preventDefault());
     
